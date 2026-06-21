@@ -135,10 +135,23 @@ function ComparePage() {
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => e.target.files && add(e.target.files)} />
 
         {ranked.length >= 2 && (
-          <button onClick={save} disabled={saving} className="w-full inline-flex items-center justify-center gap-2 rounded-2xl gradient-primary text-primary-foreground py-3.5 font-medium shadow-elevated">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save comparison
-          </button>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <button
+              onClick={() => exportComparisonPdf(intent, ranked.map((r, i) => ({
+                rank: i + 1, produceName: r.analysis.produceName,
+                ripeness: r.analysis.ripeness, ripenessScore: r.analysis.ripenessScore,
+                confidence: r.analysis.confidence, recommendation: r.rec.recommendation,
+                reasoning: r.rec.reasoning, score: r.rec.score,
+              })))}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-3.5 font-medium hover:bg-muted"
+            >
+              <FileDown className="h-4 w-4" /> Export PDF
+            </button>
+            <button onClick={save} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-2xl gradient-primary text-primary-foreground py-3.5 font-medium shadow-elevated">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save comparison
+            </button>
+          </div>
         )}
       </div>
     </AppShell>
