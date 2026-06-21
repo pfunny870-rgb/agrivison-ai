@@ -4,6 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { VoicePrefsPanel } from "@/components/VoicePrefsPanel";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({ meta: [{ title: "Settings · AgriVision AI" }] }),
@@ -62,10 +63,7 @@ function SettingsPage() {
           </button>
         </div>
 
-        <div className="glass rounded-3xl p-8">
-          <h2 className="font-semibold">Preferences</h2>
-          <p className="text-sm text-muted-foreground mt-1">Default intent and notification controls coming soon.</p>
-        </div>
+        <VoicePrefsPanel />
       </div>
     </AppShell>
   );
