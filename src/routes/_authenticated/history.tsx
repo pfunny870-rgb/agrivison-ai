@@ -25,12 +25,28 @@ function HistoryPage() {
     },
   });
 
+  const [sharingId, setSharingId] = useState<string | null>(null);
+
   async function del(id: string) {
     const { error } = await supabase.from("scans").delete().eq("id", id);
     if (error) { toast.error("Delete failed"); return; }
     toast.success("Removed");
     qc.invalidateQueries({ queryKey: ["scans-all"] });
     qc.invalidateQueries({ queryKey: ["scans-recent"] });
+  }
+
+  async function share(s: any) {
+    setSharingId(s.id);
+    try {
+      const blob = exportScanPdfBlob(s);
+      const url = await uploadAndShareScanPdf(blob, scanPdfFilename(s));
+      const ok = await copyToClipboard(url);
+      toast.success(ok ? "Share link copied to clipboard" : "Share link ready", { description: url });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not create link");
+    } finally {
+      setSharingId(null);
+    }
   }
 
   return (
@@ -68,6 +84,9 @@ function HistoryPage() {
                     <div className="flex items-center gap-3">
                       <button onClick={() => exportScanPdf(s as any)} className="hover:text-foreground transition flex items-center gap-1">
                         <FileDown className="h-3.5 w-3.5" /> PDF
+                      </button>
+                      <button onClick={() => share(s)} disabled={sharingId === s.id} className="hover:text-accent transition flex items-center gap-1 disabled:opacity-60">
+                        {sharingId === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Share2 className="h-3.5 w-3.5" />} Share
                       </button>
                       <button onClick={() => del(s.id)} className="hover:text-destructive transition flex items-center gap-1">
                         <Trash2 className="h-3.5 w-3.5" /> Delete
