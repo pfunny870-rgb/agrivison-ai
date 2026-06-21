@@ -24,6 +24,8 @@ function ComparePage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const runAnalyze = useServerFn(analyzeProduceAI);
+
   async function downscale(file: File): Promise<string> {
     const raw = await new Promise<string>((res) => {
       const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(file);
@@ -31,11 +33,11 @@ function ComparePage() {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
-        const scale = Math.min(1, 400 / Math.max(img.width, img.height));
+        const scale = Math.min(1, 512 / Math.max(img.width, img.height));
         const c = document.createElement("canvas");
         c.width = img.width * scale; c.height = img.height * scale;
         c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL("image/jpeg", 0.8));
+        resolve(c.toDataURL("image/jpeg", 0.82));
       };
       img.src = raw;
     });
@@ -43,14 +45,26 @@ function ComparePage() {
 
   async function add(files: FileList) {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    const next: Item[] = [];
-    for (const f of Array.from(files)) {
-      const imageUrl = await downscale(f);
-      next.push({ id: crypto.randomUUID(), imageUrl, analysis: analyzeImage(imageUrl.slice(0, 256) + Math.random()) });
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      let prefs: string[] = [];
+      if (u.user) {
+        const { data: p } = await supabase.from("profiles").select("dietary_preferences").eq("id", u.user.id).maybeSingle();
+        prefs = (p?.dietary_preferences as string[]) ?? [];
+      }
+      const next: Item[] = [];
+      for (const f of Array.from(files)) {
+        const imageUrl = await downscale(f);
+        const result = await runAnalyze({ data: { imageDataUrl: imageUrl, dietaryPreferences: prefs } });
+        const { source, error, ...analysis } = result as any;
+        next.push({ id: crypto.randomUUID(), imageUrl, analysis: analysis as ProduceAnalysis });
+      }
+      setItems((cur) => [...cur, ...next].slice(0, 6));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Analysis failed");
+    } finally {
+      setLoading(false);
     }
-    setItems((cur) => [...cur, ...next].slice(0, 6));
-    setLoading(false);
   }
 
   function remove(id: string) { setItems((cur) => cur.filter((i) => i.id !== id)); }
