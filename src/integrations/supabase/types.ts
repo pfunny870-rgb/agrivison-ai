@@ -14,7 +14,102 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      comparisons: {
+        Row: {
+          created_at: string
+          id: string
+          intent: string
+          items: Json
+          user_id: string
+          winner_index: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          intent: string
+          items?: Json
+          user_id: string
+          winner_index?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          intent?: string
+          items?: Json
+          user_id?: string
+          winner_index?: number | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      scans: {
+        Row: {
+          analysis: Json
+          confidence: number
+          created_at: string
+          id: string
+          image_url: string | null
+          intent: string
+          produce_name: string
+          reasoning: string | null
+          recommendation: string
+          ripeness: string
+          ripeness_score: number
+          user_id: string
+        }
+        Insert: {
+          analysis?: Json
+          confidence: number
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          intent?: string
+          produce_name: string
+          reasoning?: string | null
+          recommendation: string
+          ripeness: string
+          ripeness_score: number
+          user_id: string
+        }
+        Update: {
+          analysis?: Json
+          confidence?: number
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          intent?: string
+          produce_name?: string
+          reasoning?: string | null
+          recommendation?: string
+          ripeness?: string
+          ripeness_score?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
