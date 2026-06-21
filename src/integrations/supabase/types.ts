@@ -77,6 +77,53 @@ export type Database = {
         }
         Relationships: []
       }
+      scan_feedback: {
+        Row: {
+          created_at: string
+          id: string
+          intent: string
+          notes: string | null
+          produce_name: string
+          rating: number
+          recommendation: string
+          scan_id: string | null
+          user_id: string
+          was_correct: boolean | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          intent: string
+          notes?: string | null
+          produce_name: string
+          rating: number
+          recommendation: string
+          scan_id?: string | null
+          user_id: string
+          was_correct?: boolean | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          intent?: string
+          notes?: string | null
+          produce_name?: string
+          rating?: number
+          recommendation?: string
+          scan_id?: string | null
+          user_id?: string
+          was_correct?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scan_feedback_scan_id_fkey"
+            columns: ["scan_id"]
+            isOneToOne: false
+            referencedRelation: "scans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scans: {
         Row: {
           analysis: Json
