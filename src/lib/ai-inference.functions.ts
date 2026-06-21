@@ -36,7 +36,7 @@ const PROMPT = (hint?: string, prefs?: string[]) => `Analyze this produce image.
 
 Return JSON with this exact shape:
 {
-  "produceName": string (e.g. "Tomato", "Banana"),
+  "produceName": string (e.g. "Banana", "Apple", "Mango"),
   "ripeness": "unripe" | "near_ripe" | "ripe" | "overripe" | "spoiled",
   "ripenessScore": number 0-100 (0=very unripe, 100=fully spoiled),
   "confidence": number 0-1,
@@ -104,7 +104,7 @@ function fallback(seed: string, hint?: string): ProduceAnalysis {
   }
   let s = Math.abs(h) || 1;
   const rnd = () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296;
-  const pool = ["Tomato", "Apple", "Banana", "Avocado", "Mango", "Bell Pepper"];
+  const pool = ["Banana", "Apple", "Mango", "Avocado", "Tomato", "Bell Pepper"];
   const ripenessScore = Math.round(20 + rnd() * 75);
   let ripeness: Ripeness =
     ripenessScore < 30 ? "unripe" :
