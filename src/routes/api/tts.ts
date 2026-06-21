@@ -9,6 +9,8 @@ export const Route = createFileRoute("/api/tts")({
         const body = await request.json().catch(() => ({}));
         const text = String(body?.text ?? "").slice(0, 1500);
         const voice = String(body?.voice ?? "alloy");
+        const rawSpeed = Number(body?.speed);
+        const speed = Number.isFinite(rawSpeed) ? Math.min(2, Math.max(0.5, rawSpeed)) : 1.0;
         if (!text) return new Response("Missing text", { status: 400 });
 
         const res = await fetch("https://ai.gateway.lovable.dev/v1/audio/speech", {
@@ -21,6 +23,7 @@ export const Route = createFileRoute("/api/tts")({
             model: "openai/gpt-4o-mini-tts",
             input: text,
             voice,
+            speed,
             response_format: "mp3",
           }),
         });

@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
-import { Upload, Loader2, RotateCcw, Save, Sparkles, AlertCircle, FileDown, Cpu, Volume2, VolumeX, Share2 } from "lucide-react";
+import { Upload, Loader2, RotateCcw, Save, Sparkles, AlertCircle, FileDown, Cpu, Volume2, Share2 } from "lucide-react";
 import { recommendFor, INTENT_LABELS, RECOMMENDATION_LABELS, type Intent, type ProduceAnalysis } from "@/lib/ai-analysis";
 import { analyzeProduceAI } from "@/lib/ai-inference.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,7 +11,9 @@ import { RecBadge } from "./dashboard";
 import { useQueryClient } from "@tanstack/react-query";
 import { SignalsBreakdown } from "@/components/SignalsBreakdown";
 import { exportScanPdf, exportScanPdfBlob, scanPdfFilename } from "@/lib/pdf-export";
-import { speak, stopVoice, buildAnnouncement } from "@/lib/voice";
+import { speak, stopVoice, speakFromPrefs } from "@/lib/voice";
+import { loadVoicePrefs, type VoicePrefs } from "@/lib/voice-prefs";
+import { VoicePrefsPanel } from "@/components/VoicePrefsPanel";
 import { uploadAndShareScanPdf, copyToClipboard } from "@/lib/share-pdf";
 import { FeedbackBar } from "@/components/FeedbackBar";
 
@@ -29,7 +31,7 @@ function ScanPage() {
   const [intent, setIntent] = useState<Intent>("eat_today");
   const [saving, setSaving] = useState(false);
   const [savedScanId, setSavedScanId] = useState<string | null>(null);
-  const [voiceOn, setVoiceOn] = useState(true);
+  const [voicePrefs, setVoicePrefs] = useState<VoicePrefs>(loadVoicePrefs());
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const qc = useQueryClient();
@@ -101,17 +103,15 @@ function ScanPage() {
       setSource(src);
       if (src === "fallback") toast.warning("AI vision unavailable — using heuristic fallback");
       // Auto-announce — important parts only
-      if (voiceOn) {
+      if (voicePrefs.enabled) {
         const rec = recommendFor(ax, intent);
-        const text = buildAnnouncement({
+        speakFromPrefs(voicePrefs, {
           produceName: ax.produceName,
           recommendationLabel: RECOMMENDATION_LABELS[rec.recommendation],
           ripenessLabel: ax.ripeness,
           matchScore: rec.score,
           shelfLifeDays: ax.shelfLifeDays,
-          topNote: ax.notes?.[0],
-        });
-        speak(text).catch(() => {});
+        }).catch(() => {});
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not analyze image");
@@ -129,14 +129,13 @@ function ScanPage() {
   function replayVoice() {
     if (!analysis) return;
     const rec = recommendFor(analysis, intent);
-    speak(buildAnnouncement({
+    speakFromPrefs(voicePrefs, {
       produceName: analysis.produceName,
       recommendationLabel: RECOMMENDATION_LABELS[rec.recommendation],
       ripenessLabel: analysis.ripeness,
       matchScore: rec.score,
       shelfLifeDays: analysis.shelfLifeDays,
-      topNote: analysis.notes?.[0],
-    })).catch(() => toast.error("Voice unavailable"));
+    }).catch(() => toast.error("Voice unavailable"));
   }
 
   async function save() {
@@ -212,21 +211,19 @@ function ScanPage() {
   return (
     <AppShell>
       <div className="space-y-7">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-sm text-accent font-medium uppercase tracking-widest">Scan</div>
-            <h1 className="text-3xl md:text-4xl font-semibold mt-1">Analyze produce</h1>
-            <p className="text-muted-foreground mt-2">Upload a photo. Our AI evaluates ripeness, freshness and intent-fit — and reads the verdict out loud.</p>
-          </div>
-          <button
-            onClick={() => { if (voiceOn) stopVoice(); setVoiceOn((v) => !v); }}
-            className={`shrink-0 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border transition ${voiceOn ? "bg-accent/15 text-accent border-accent/40" : "bg-card border-border text-muted-foreground"}`}
-            title={voiceOn ? "Voice on — auto-announce results" : "Voice muted"}
-          >
-            {voiceOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-            {voiceOn ? "Voice on" : "Voice off"}
-          </button>
+        <div>
+          <div className="text-sm text-accent font-medium uppercase tracking-widest">Scan</div>
+          <h1 className="text-3xl md:text-4xl font-semibold mt-1">Analyze produce</h1>
+          <p className="text-muted-foreground mt-2">Upload a photo. Our AI evaluates ripeness, freshness and intent-fit — and reads the verdict out loud, your way.</p>
         </div>
+
+        <VoicePrefsPanel
+          compact
+          onChange={(p) => {
+            setVoicePrefs(p);
+            if (!p.enabled) stopVoice();
+          }}
+        />
 
         <div className="grid lg:grid-cols-5 gap-6">
           <div className="lg:col-span-2 space-y-4">

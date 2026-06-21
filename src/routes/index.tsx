@@ -30,8 +30,7 @@ function Landing() {
             <a href="#specs" className="hover:text-foreground transition">Smart Specs</a>
           </div>
           <div className="flex items-center gap-2">
-            <Link to="/auth" className="hidden sm:inline-flex px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition">Sign in</Link>
-            <Link to="/auth" className="inline-flex items-center gap-1.5 rounded-full gradient-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-glass hover:shadow-elevated transition">
+            <Link to="/scan" className="inline-flex items-center gap-1.5 rounded-full gradient-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-glass hover:shadow-elevated transition">
               Get started <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -53,7 +52,7 @@ function Landing() {
               AgriVision AI turns any glance at produce into a decision. Ripeness, freshness, intent-matched recommendations — instant, contextual, and built for the wearable era.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link to="/auth" className="inline-flex items-center gap-2 rounded-full gradient-primary px-7 py-3.5 text-base font-medium text-primary-foreground shadow-elevated hover:scale-[1.02] transition">
+              <Link to="/scan" className="inline-flex items-center gap-2 rounded-full gradient-primary px-7 py-3.5 text-base font-medium text-primary-foreground shadow-elevated hover:scale-[1.02] transition">
                 Start scanning <ArrowRight className="h-4 w-4" />
               </Link>
               <a href="#how" className="inline-flex items-center gap-2 rounded-full glass-strong px-7 py-3.5 text-base font-medium hover:bg-muted transition">
@@ -164,7 +163,7 @@ function Landing() {
             </div>
             <h2 className="text-4xl md:text-5xl font-semibold tracking-tight">Built for the <span className="text-gradient">wearable era.</span></h2>
             <p className="mt-5 text-lg text-muted-foreground">AgriVision Smart Specs project a contextual recommendation over every produce aisle, hands-free.</p>
-            <Link to="/auth" className="mt-8 inline-flex items-center gap-2 rounded-full gradient-primary px-6 py-3 text-sm font-medium text-primary-foreground w-fit shadow-glass">
+            <Link to="/specs" className="mt-8 inline-flex items-center gap-2 rounded-full gradient-primary px-6 py-3 text-sm font-medium text-primary-foreground w-fit shadow-glass">
               Preview the experience <ArrowRight className="h-4 w-4" />
             </Link>
           </div>

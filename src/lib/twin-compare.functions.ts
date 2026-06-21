@@ -8,6 +8,16 @@ const InputSchema = z.object({
   intent: z.string().optional(),
 });
 
+const RegionSchema = z.object({
+  label: z.string(),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  w: z.number().min(0).max(1),
+  h: z.number().min(0).max(1),
+  severity: z.enum(["positive", "negative", "neutral"]).default("neutral"),
+});
+export type TwinRegion = z.infer<typeof RegionSchema>;
+
 const TwinSchema = z.object({
   produceName: z.string(),
   winnerIndex: z.number().int().min(0).max(1),
@@ -22,6 +32,7 @@ const TwinSchema = z.object({
         ripeness: z.string(),
         strengths: z.array(z.string()),
         weaknesses: z.array(z.string()),
+        regions: z.array(RegionSchema).default([]),
       }),
     )
     .length(2),
@@ -38,7 +49,7 @@ const TwinSchema = z.object({
 
 export type TwinAnalysis = z.infer<typeof TwinSchema>;
 
-const SYSTEM = `You are AgriVision AI's twin produce comparison vision model. Given two images of visually similar produce items (e.g., two bananas, two banana bunches), perform a careful side-by-side differential analysis. Identify the subtle differences in ripeness, color, surface defects, bruising, stem condition, and freshness. Pick a winner with clear reasoning. Respond ONLY with strict JSON. No markdown, no prose.`;
+const SYSTEM = `You are AgriVision AI's twin produce comparison vision model. Given two images of visually similar produce items (e.g., two bananas, two banana bunches), perform a careful side-by-side differential analysis. Identify subtle differences in ripeness, color, surface defects, bruising, stem condition, and freshness. Pick a winner with clear reasoning. For each image, also return normalized bounding-box "regions" pointing to the SPECIFIC visual evidence (brown spot, bruise, uniform-color zone, dark stem, etc.) that drove your conclusion. Respond ONLY with strict JSON. No markdown, no prose.`;
 
 const PROMPT = (hint?: string, intent?: string) => `Compare these two ${hint || "produce"} images (image A first, image B second).${intent ? ` User intent: ${intent}.` : ""}
 
@@ -50,15 +61,24 @@ Return JSON in this exact shape:
   "confidence": 0-1,
   "summary": one-paragraph plain-language explanation of why the winner wins,
   "items": [
-    { "label": "Image A", "ripenessScore": 0-100, "ripeness": "unripe|near_ripe|ripe|overripe|spoiled", "strengths": [2-3 short bullets], "weaknesses": [1-3 short bullets] },
-    { "label": "Image B", "ripenessScore": 0-100, "ripeness": "unripe|near_ripe|ripe|overripe|spoiled", "strengths": [2-3 short bullets], "weaknesses": [1-3 short bullets] }
+    {
+      "label": "Image A",
+      "ripenessScore": 0-100,
+      "ripeness": "unripe|near_ripe|ripe|overripe|spoiled",
+      "strengths": [2-3 short bullets],
+      "weaknesses": [1-3 short bullets],
+      "regions": [
+        { "label": short tag (e.g. "Brown spot", "Bruise", "Even color"), "x": 0-1, "y": 0-1, "w": 0-1, "h": 0-1, "severity": "positive"|"negative"|"neutral" }
+      ]
+    },
+    { "label": "Image B", ...same shape... }
   ],
   "differences": [
-    { "aspect": short label (e.g. "Surface bruising"), "a": observation for A, "b": observation for B, "betterIndex": 0 or 1, "weight": 0-1 importance }
+    { "aspect": short label, "a": observation for A, "b": observation for B, "betterIndex": 0 or 1, "weight": 0-1 }
   ]
 }
 
-Focus on 4-6 most decision-relevant differences.`;
+Region coordinates are NORMALIZED to the image (0,0 = top-left, 1,1 = bottom-right). x,y is the top-left of the box; w,h is its size. Return 2-4 regions per image pointing to the most decision-relevant evidence (e.g. exact bruise location, uniform yellow band, dark stem). Use "negative" for defects/spoilage, "positive" for desirable traits, "neutral" otherwise. Focus on 4-6 most decision-relevant differences.`;
 
 export const analyzeTwinCompare = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => InputSchema.parse(input))
@@ -111,6 +131,10 @@ function fallback(): TwinAnalysis {
         ripeness: "ripe",
         strengths: ["Even color coverage", "Few visible spots"],
         weaknesses: ["Minor stem darkening"],
+        regions: [
+          { label: "Even color", x: 0.2, y: 0.3, w: 0.5, h: 0.4, severity: "positive" },
+          { label: "Stem", x: 0.4, y: 0.05, w: 0.15, h: 0.12, severity: "neutral" },
+        ],
       },
       {
         label: "Image B",
@@ -118,6 +142,10 @@ function fallback(): TwinAnalysis {
         ripeness: "ripe",
         strengths: ["Slightly more sweetness expected"],
         weaknesses: ["More surface speckles", "Softer-looking skin"],
+        regions: [
+          { label: "Brown spot", x: 0.35, y: 0.45, w: 0.18, h: 0.18, severity: "negative" },
+          { label: "Speckling", x: 0.6, y: 0.55, w: 0.2, h: 0.15, severity: "negative" },
+        ],
       },
     ],
     differences: [
