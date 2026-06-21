@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, ScanLine, GitCompare, History, BookOpen, Glasses, Settings, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, ScanLine, GitCompare, Copy, History, BookOpen, Glasses, Settings, LogOut, Menu, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "./Logo";
@@ -9,6 +9,7 @@ const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/scan", label: "Scan", icon: ScanLine },
   { to: "/compare", label: "Compare", icon: GitCompare },
+  { to: "/twin-compare", label: "Twin Compare", icon: Copy },
   { to: "/history", label: "History", icon: History },
   { to: "/learn", label: "Learn", icon: BookOpen },
   { to: "/specs", label: "Smart Specs", icon: Glasses },

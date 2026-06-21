@@ -3,7 +3,7 @@ import type { ProduceAnalysis, Recommendation, Intent } from "./ai-analysis";
 import { INTENT_LABELS, RECOMMENDATION_LABELS } from "./ai-analysis";
 import { deriveSignals } from "./signals";
 
-const BRAND = { r: 16, g: 91, b: 73 }; // deep green
+const BRAND = { r: 16, g: 91, b: 73 };
 const ACCENT = { r: 234, g: 179, b: 8 };
 
 function header(doc: jsPDF, title: string, subtitle: string) {
@@ -41,15 +41,13 @@ export interface ScanRecord {
   created_at: string;
 }
 
-export function exportScanPdf(scan: ScanRecord) {
+function buildScanDoc(scan: ScanRecord): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   header(doc, `Scan Report · ${scan.produce_name}`, new Date(scan.created_at).toLocaleString());
 
   let y = 42;
   if (scan.image_url && scan.image_url.startsWith("data:image/")) {
-    try {
-      doc.addImage(scan.image_url, "JPEG", 14, y, 60, 60);
-    } catch {}
+    try { doc.addImage(scan.image_url, "JPEG", 14, y, 60, 60); } catch {}
   }
 
   doc.setFont("helvetica", "bold");
@@ -69,8 +67,7 @@ export function exportScanPdf(scan: ScanRecord) {
   doc.setFontSize(10);
   doc.text(
     `Recommendation: ${RECOMMENDATION_LABELS[scan.recommendation as Recommendation] ?? String(scan.recommendation)}`,
-    85,
-    y + 41,
+    85, y + 41,
   );
 
   y += 70;
@@ -99,7 +96,6 @@ export function exportScanPdf(scan: ScanRecord) {
     doc.setFont("helvetica", "normal");
     const d = doc.splitTextToSize(s.detail, 180);
     doc.text(d, 14, y + 5);
-    // bar
     doc.setFillColor(230, 230, 230);
     doc.rect(14, y + 5 + d.length * 4 + 1, 180, 2, "F");
     const color = s.impact === "positive" ? [16, 185, 129] : s.impact === "neutral" ? [59, 130, 246] : [239, 68, 68];
@@ -109,7 +105,19 @@ export function exportScanPdf(scan: ScanRecord) {
   }
 
   footer(doc);
-  doc.save(`agrivision-scan-${scan.produce_name.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+  return doc;
+}
+
+export function scanPdfFilename(scan: ScanRecord) {
+  return `agrivision-scan-${scan.produce_name.toLowerCase().replace(/\s+/g, "-")}.pdf`;
+}
+
+export function exportScanPdf(scan: ScanRecord) {
+  buildScanDoc(scan).save(scanPdfFilename(scan));
+}
+
+export function exportScanPdfBlob(scan: ScanRecord): Blob {
+  return buildScanDoc(scan).output("blob");
 }
 
 export interface ComparisonItem {
@@ -123,7 +131,7 @@ export interface ComparisonItem {
   score: number;
 }
 
-export function exportComparisonPdf(intent: Intent | string, items: ComparisonItem[]) {
+function buildComparisonDoc(intent: Intent | string, items: ComparisonItem[]): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   header(doc, `Comparison Report · ${INTENT_LABELS[intent as Intent] ?? String(intent)}`, new Date().toLocaleString());
 
@@ -158,5 +166,17 @@ export function exportComparisonPdf(intent: Intent | string, items: ComparisonIt
   }
 
   footer(doc);
-  doc.save(`agrivision-comparison-${Date.now()}.pdf`);
+  return doc;
+}
+
+export function comparisonPdfFilename() {
+  return `agrivision-comparison-${Date.now()}.pdf`;
+}
+
+export function exportComparisonPdf(intent: Intent | string, items: ComparisonItem[]) {
+  buildComparisonDoc(intent, items).save(comparisonPdfFilename());
+}
+
+export function exportComparisonPdfBlob(intent: Intent | string, items: ComparisonItem[]): Blob {
+  return buildComparisonDoc(intent, items).output("blob");
 }

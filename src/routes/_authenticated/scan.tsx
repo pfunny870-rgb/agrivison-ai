@@ -2,15 +2,18 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
-import { Upload, Loader2, RotateCcw, Save, Sparkles, AlertCircle, FileDown, Cpu } from "lucide-react";
-import { recommendFor, INTENT_LABELS, type Intent, type ProduceAnalysis } from "@/lib/ai-analysis";
+import { Upload, Loader2, RotateCcw, Save, Sparkles, AlertCircle, FileDown, Cpu, Volume2, VolumeX, Share2 } from "lucide-react";
+import { recommendFor, INTENT_LABELS, RECOMMENDATION_LABELS, type Intent, type ProduceAnalysis } from "@/lib/ai-analysis";
 import { analyzeProduceAI } from "@/lib/ai-inference.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { RecBadge } from "./dashboard";
 import { useQueryClient } from "@tanstack/react-query";
 import { SignalsBreakdown } from "@/components/SignalsBreakdown";
-import { exportScanPdf } from "@/lib/pdf-export";
+import { exportScanPdf, exportScanPdfBlob, scanPdfFilename } from "@/lib/pdf-export";
+import { speak, stopVoice, buildAnnouncement } from "@/lib/voice";
+import { uploadAndShareScanPdf, copyToClipboard } from "@/lib/share-pdf";
+import { FeedbackBar } from "@/components/FeedbackBar";
 
 export const Route = createFileRoute("/_authenticated/scan")({
   head: () => ({ meta: [{ title: "Scan · AgriVision AI" }] }),
@@ -25,6 +28,10 @@ function ScanPage() {
   const [source, setSource] = useState<"ai" | "fallback" | null>(null);
   const [intent, setIntent] = useState<Intent>("eat_today");
   const [saving, setSaving] = useState(false);
+  const [savedScanId, setSavedScanId] = useState<string | null>(null);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const runAnalyze = useServerFn(analyzeProduceAI);
@@ -40,6 +47,7 @@ function ScanPage() {
         .maybeSingle();
       if (p?.default_intent) setIntent(p.default_intent as Intent);
     })();
+    return () => stopVoice();
   }, []);
 
   function readFile(file: File) {
@@ -69,6 +77,8 @@ function ScanPage() {
   async function handleFile(file: File) {
     setAnalysis(null);
     setSource(null);
+    setSavedScanId(null);
+    setShareUrl(null);
     setAnalyzing(true);
     try {
       const raw = await readFile(file);
@@ -86,9 +96,23 @@ function ScanPage() {
       }
       const result = await runAnalyze({ data: { imageDataUrl: small, dietaryPreferences: prefs } });
       const { source: src, error, ...a } = result as any;
-      setAnalysis(a as ProduceAnalysis);
+      const ax = a as ProduceAnalysis;
+      setAnalysis(ax);
       setSource(src);
       if (src === "fallback") toast.warning("AI vision unavailable — using heuristic fallback");
+      // Auto-announce — important parts only
+      if (voiceOn) {
+        const rec = recommendFor(ax, intent);
+        const text = buildAnnouncement({
+          produceName: ax.produceName,
+          recommendationLabel: RECOMMENDATION_LABELS[rec.recommendation],
+          ripenessLabel: ax.ripeness,
+          matchScore: rec.score,
+          shelfLifeDays: ax.shelfLifeDays,
+          topNote: ax.notes?.[0],
+        });
+        speak(text).catch(() => {});
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not analyze image");
     } finally {
@@ -96,7 +120,24 @@ function ScanPage() {
     }
   }
 
-  function reset() { setImgUrl(null); setAnalysis(null); setSource(null); }
+  function reset() {
+    stopVoice();
+    setImgUrl(null); setAnalysis(null); setSource(null);
+    setSavedScanId(null); setShareUrl(null);
+  }
+
+  function replayVoice() {
+    if (!analysis) return;
+    const rec = recommendFor(analysis, intent);
+    speak(buildAnnouncement({
+      produceName: analysis.produceName,
+      recommendationLabel: RECOMMENDATION_LABELS[rec.recommendation],
+      ripenessLabel: analysis.ripeness,
+      matchScore: rec.score,
+      shelfLifeDays: analysis.shelfLifeDays,
+      topNote: analysis.notes?.[0],
+    })).catch(() => toast.error("Voice unavailable"));
+  }
 
   async function save() {
     if (!analysis || !imgUrl) return;
@@ -105,7 +146,7 @@ function ScanPage() {
       const { data: u } = await supabase.auth.getUser();
       if (!u.user) throw new Error("Not signed in");
       const rec = recommendFor(analysis, intent);
-      const { error } = await supabase.from("scans").insert({
+      const { data, error } = await supabase.from("scans").insert({
         user_id: u.user.id,
         produce_name: analysis.produceName,
         image_url: imgUrl,
@@ -116,8 +157,9 @@ function ScanPage() {
         recommendation: rec.recommendation,
         reasoning: rec.reasoning,
         analysis: analysis as any,
-      });
+      }).select("id").single();
       if (error) throw error;
+      setSavedScanId(data?.id ?? null);
       toast.success("Scan saved to history");
       qc.invalidateQueries({ queryKey: ["scans-recent"] });
       qc.invalidateQueries({ queryKey: ["scans-all"] });
@@ -129,10 +171,10 @@ function ScanPage() {
     }
   }
 
-  function exportPdf() {
-    if (!analysis || !imgUrl) return;
+  function scanRecord() {
+    if (!analysis || !imgUrl) return null;
     const rec = recommendFor(analysis, intent);
-    exportScanPdf({
+    return {
       produce_name: analysis.produceName,
       intent, ripeness: analysis.ripeness,
       ripeness_score: analysis.ripenessScore,
@@ -142,7 +184,27 @@ function ScanPage() {
       image_url: imgUrl,
       analysis,
       created_at: new Date().toISOString(),
-    });
+    };
+  }
+
+  function exportPdf() {
+    const r = scanRecord(); if (r) exportScanPdf(r);
+  }
+
+  async function sharePdf() {
+    const r = scanRecord(); if (!r) return;
+    setSharing(true);
+    try {
+      const blob = exportScanPdfBlob(r);
+      const url = await uploadAndShareScanPdf(blob, scanPdfFilename(r));
+      setShareUrl(url);
+      const ok = await copyToClipboard(url);
+      toast.success(ok ? "Share link copied to clipboard" : "Share link ready");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not create share link");
+    } finally {
+      setSharing(false);
+    }
   }
 
   const rec = analysis ? recommendFor(analysis, intent) : null;
@@ -150,10 +212,20 @@ function ScanPage() {
   return (
     <AppShell>
       <div className="space-y-7">
-        <div>
-          <div className="text-sm text-accent font-medium uppercase tracking-widest">Scan</div>
-          <h1 className="text-3xl md:text-4xl font-semibold mt-1">Analyze produce</h1>
-          <p className="text-muted-foreground mt-2">Upload a photo. Our AI evaluates ripeness, freshness and intent-fit.</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm text-accent font-medium uppercase tracking-widest">Scan</div>
+            <h1 className="text-3xl md:text-4xl font-semibold mt-1">Analyze produce</h1>
+            <p className="text-muted-foreground mt-2">Upload a photo. Our AI evaluates ripeness, freshness and intent-fit — and reads the verdict out loud.</p>
+          </div>
+          <button
+            onClick={() => { if (voiceOn) stopVoice(); setVoiceOn((v) => !v); }}
+            className={`shrink-0 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium border transition ${voiceOn ? "bg-accent/15 text-accent border-accent/40" : "bg-card border-border text-muted-foreground"}`}
+            title={voiceOn ? "Voice on — auto-announce results" : "Voice muted"}
+          >
+            {voiceOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            {voiceOn ? "Voice on" : "Voice off"}
+          </button>
         </div>
 
         <div className="grid lg:grid-cols-5 gap-6">
@@ -231,7 +303,12 @@ function ScanPage() {
                       <div className="text-2xl font-semibold mt-1">{analysis.produceName}</div>
                       <div className="text-sm text-muted-foreground mt-1 capitalize">{analysis.ripeness.replace(/_/g, " ")} · {analysis.shelfLifeDays}d shelf life</div>
                     </div>
-                    {rec && <RecBadge rec={rec.recommendation} />}
+                    <div className="flex items-center gap-2">
+                      <button onClick={replayVoice} className="rounded-full bg-card border border-border h-10 w-10 flex items-center justify-center hover:bg-muted" title="Replay voice">
+                        <Volume2 className="h-4 w-4" />
+                      </button>
+                      {rec && <RecBadge rec={rec.recommendation} />}
+                    </div>
                   </div>
 
                   {rec && (
@@ -265,14 +342,34 @@ function ScanPage() {
 
                 <SignalsBreakdown analysis={analysis} recommendation={rec?.recommendation} />
 
-                <div className="grid sm:grid-cols-2 gap-3">
+                {rec && (
+                  <FeedbackBar
+                    produceName={analysis.produceName}
+                    intent={intent}
+                    recommendation={rec.recommendation}
+                    scanId={savedScanId}
+                  />
+                )}
+
+                <div className="grid sm:grid-cols-3 gap-3">
                   <button onClick={exportPdf} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-3 font-medium hover:bg-muted">
                     <FileDown className="h-4 w-4" /> Export PDF
+                  </button>
+                  <button onClick={sharePdf} disabled={sharing} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-3 font-medium hover:bg-muted disabled:opacity-60">
+                    {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} Share link
                   </button>
                   <button onClick={save} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-2xl gradient-primary text-primary-foreground py-3 font-medium shadow-elevated hover:scale-[1.01] transition disabled:opacity-60">
                     {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save to history
                   </button>
                 </div>
+
+                {shareUrl && (
+                  <div className="glass rounded-2xl p-4 flex flex-wrap items-center gap-3">
+                    <Share2 className="h-4 w-4 text-accent shrink-0" />
+                    <a href={shareUrl} target="_blank" rel="noreferrer" className="flex-1 min-w-0 truncate text-sm text-accent hover:underline">{shareUrl}</a>
+                    <button onClick={() => copyToClipboard(shareUrl).then((ok) => toast.success(ok ? "Copied" : "Copy failed"))} className="text-xs rounded-full bg-card border border-border px-3 py-1.5 hover:bg-muted">Copy</button>
+                  </div>
+                )}
               </>
             )}
           </div>
