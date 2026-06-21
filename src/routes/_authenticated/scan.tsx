@@ -1,12 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
-import { Upload, Loader2, RotateCcw, Save, Sparkles, AlertCircle } from "lucide-react";
-import { analyzeImage, recommendFor, INTENT_LABELS, RECOMMENDATION_LABELS, type Intent, type ProduceAnalysis, type Recommendation } from "@/lib/ai-analysis";
+import { Upload, Loader2, RotateCcw, Save, Sparkles, AlertCircle, FileDown, Cpu } from "lucide-react";
+import { recommendFor, INTENT_LABELS, type Intent, type ProduceAnalysis } from "@/lib/ai-analysis";
+import { analyzeProduceAI } from "@/lib/ai-inference.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { RecBadge } from "./dashboard";
 import { useQueryClient } from "@tanstack/react-query";
+import { SignalsBreakdown } from "@/components/SignalsBreakdown";
+import { exportScanPdf } from "@/lib/pdf-export";
 
 export const Route = createFileRoute("/_authenticated/scan")({
   head: () => ({ meta: [{ title: "Scan · AgriVision AI" }] }),
@@ -18,10 +22,25 @@ function ScanPage() {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ProduceAnalysis | null>(null);
+  const [source, setSource] = useState<"ai" | "fallback" | null>(null);
   const [intent, setIntent] = useState<Intent>("eat_today");
   const [saving, setSaving] = useState(false);
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const runAnalyze = useServerFn(analyzeProduceAI);
+
+  useEffect(() => {
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      const { data: p } = await supabase
+        .from("profiles")
+        .select("default_intent")
+        .eq("id", u.user.id)
+        .maybeSingle();
+      if (p?.default_intent) setIntent(p.default_intent as Intent);
+    })();
+  }, []);
 
   function readFile(file: File) {
     return new Promise<string>((resolve, reject) => {
@@ -32,7 +51,7 @@ function ScanPage() {
     });
   }
 
-  async function downscale(dataUrl: string, max = 512): Promise<string> {
+  async function downscale(dataUrl: string, max = 640): Promise<string> {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -49,25 +68,35 @@ function ScanPage() {
 
   async function handleFile(file: File) {
     setAnalysis(null);
+    setSource(null);
     setAnalyzing(true);
     try {
       const raw = await readFile(file);
       const small = await downscale(raw);
       setImgUrl(small);
-      // Simulate AI latency
-      await new Promise((r) => setTimeout(r, 1200));
-      const a = analyzeImage(small.slice(0, 256));
-      setAnalysis(a);
+      const { data: u } = await supabase.auth.getUser();
+      let prefs: string[] = [];
+      if (u.user) {
+        const { data: p } = await supabase
+          .from("profiles")
+          .select("dietary_preferences")
+          .eq("id", u.user.id)
+          .maybeSingle();
+        prefs = (p?.dietary_preferences as string[]) ?? [];
+      }
+      const result = await runAnalyze({ data: { imageDataUrl: small, dietaryPreferences: prefs } });
+      const { source: src, error, ...a } = result as any;
+      setAnalysis(a as ProduceAnalysis);
+      setSource(src);
+      if (src === "fallback") toast.warning("AI vision unavailable — using heuristic fallback");
     } catch (e) {
-      toast.error("Could not read image");
+      toast.error(e instanceof Error ? e.message : "Could not analyze image");
     } finally {
       setAnalyzing(false);
     }
   }
 
-  function reset() {
-    setImgUrl(null); setAnalysis(null);
-  }
+  function reset() { setImgUrl(null); setAnalysis(null); setSource(null); }
 
   async function save() {
     if (!analysis || !imgUrl) return;
@@ -100,6 +129,22 @@ function ScanPage() {
     }
   }
 
+  function exportPdf() {
+    if (!analysis || !imgUrl) return;
+    const rec = recommendFor(analysis, intent);
+    exportScanPdf({
+      produce_name: analysis.produceName,
+      intent, ripeness: analysis.ripeness,
+      ripeness_score: analysis.ripenessScore,
+      confidence: analysis.confidence,
+      recommendation: rec.recommendation,
+      reasoning: rec.reasoning,
+      image_url: imgUrl,
+      analysis,
+      created_at: new Date().toISOString(),
+    });
+  }
+
   const rec = analysis ? recommendFor(analysis, intent) : null;
 
   return (
@@ -112,7 +157,6 @@ function ScanPage() {
         </div>
 
         <div className="grid lg:grid-cols-5 gap-6">
-          {/* Upload + image */}
           <div className="lg:col-span-2 space-y-4">
             <div className="glass-strong rounded-3xl p-2 aspect-square relative overflow-hidden">
               {imgUrl ? (
@@ -122,21 +166,14 @@ function ScanPage() {
                     <div className="absolute inset-2 rounded-[1.4rem] bg-foreground/40 backdrop-blur-sm flex items-center justify-center">
                       <div className="glass-strong rounded-2xl px-5 py-3 flex items-center gap-3">
                         <Loader2 className="h-5 w-5 animate-spin text-accent" />
-                        <span className="text-sm font-medium">Analyzing…</span>
+                        <span className="text-sm font-medium">AI analyzing image…</span>
                       </div>
-                    </div>
-                  )}
-                  {imgUrl && analyzing && (
-                    <div className="absolute inset-x-2 top-2 h-1 rounded-full overflow-hidden">
-                      <div className="h-full shimmer" />
                     </div>
                   )}
                 </>
               ) : (
-                <button
-                  onClick={() => inputRef.current?.click()}
-                  className="h-full w-full rounded-[1.4rem] border-2 border-dashed border-border flex flex-col items-center justify-center gap-3 text-muted-foreground hover:text-foreground hover:border-primary transition group"
-                >
+                <button onClick={() => inputRef.current?.click()}
+                  className="h-full w-full rounded-[1.4rem] border-2 border-dashed border-border flex flex-col items-center justify-center gap-3 text-muted-foreground hover:text-foreground hover:border-primary transition group">
                   <div className="h-16 w-16 rounded-2xl gradient-primary flex items-center justify-center shadow-glass group-hover:scale-110 transition">
                     <Upload className="h-6 w-6 text-primary-foreground" />
                   </div>
@@ -158,20 +195,15 @@ function ScanPage() {
             )}
           </div>
 
-          {/* Analysis */}
           <div className="lg:col-span-3 space-y-4">
-            {/* Intent picker */}
             <div className="glass-strong rounded-3xl p-6">
               <div className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3">Your intent</div>
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(INTENT_LABELS) as Intent[]).map((k) => (
-                  <button
-                    key={k}
-                    onClick={() => setIntent(k)}
+                  <button key={k} onClick={() => setIntent(k)}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition ${
                       intent === k ? "gradient-primary text-primary-foreground shadow-glass" : "bg-card border border-border hover:bg-muted"
-                    }`}
-                  >
+                    }`}>
                     {INTENT_LABELS[k]}
                   </button>
                 ))}
@@ -185,10 +217,17 @@ function ScanPage() {
               </div>
             ) : (
               <>
-                <div className="glass-strong rounded-3xl p-6 animate-(--animate-fade-in)">
+                <div className="glass-strong rounded-3xl p-6">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-xs uppercase tracking-widest text-muted-foreground">Detected</div>
+                      <div className="text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        Detected
+                        {source && (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${source === "ai" ? "bg-accent/15 text-accent" : "bg-warning/20 text-warning-foreground"}`}>
+                            <Cpu className="h-3 w-3" /> {source === "ai" ? "Live AI" : "Fallback"}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-2xl font-semibold mt-1">{analysis.produceName}</div>
                       <div className="text-sm text-muted-foreground mt-1 capitalize">{analysis.ripeness.replace(/_/g, " ")} · {analysis.shelfLifeDays}d shelf life</div>
                     </div>
@@ -224,10 +263,16 @@ function ScanPage() {
                   )}
                 </div>
 
-                <button onClick={save} disabled={saving} className="w-full inline-flex items-center justify-center gap-2 rounded-2xl gradient-primary text-primary-foreground py-3.5 font-medium shadow-elevated hover:scale-[1.01] transition disabled:opacity-60">
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save to history
-                </button>
+                <SignalsBreakdown analysis={analysis} recommendation={rec?.recommendation} />
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <button onClick={exportPdf} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-3 font-medium hover:bg-muted">
+                    <FileDown className="h-4 w-4" /> Export PDF
+                  </button>
+                  <button onClick={save} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-2xl gradient-primary text-primary-foreground py-3 font-medium shadow-elevated hover:scale-[1.01] transition disabled:opacity-60">
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save to history
+                  </button>
+                </div>
               </>
             )}
           </div>
