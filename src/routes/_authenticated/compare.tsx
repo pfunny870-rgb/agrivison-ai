@@ -2,13 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
-import { Plus, X, Trophy, Loader2, Save, FileDown } from "lucide-react";
+import { Plus, X, Trophy, Loader2, Save, FileDown, Share2 } from "lucide-react";
 import { recommendFor, INTENT_LABELS, type Intent, type ProduceAnalysis, type Recommendation_Output } from "@/lib/ai-analysis";
 import { analyzeProduceAI } from "@/lib/ai-inference.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { RecBadge } from "./dashboard";
-import { exportComparisonPdf } from "@/lib/pdf-export";
+import { exportComparisonPdf, exportComparisonPdfBlob, comparisonPdfFilename } from "@/lib/pdf-export";
+import { uploadAndShareScanPdf, copyToClipboard } from "@/lib/share-pdf";
 
 export const Route = createFileRoute("/_authenticated/compare")({
   head: () => ({ meta: [{ title: "Compare · AgriVision AI" }] }),
@@ -23,6 +24,7 @@ function ComparePage() {
   const [intent, setIntent] = useState<Intent>("eat_today");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const runAnalyze = useServerFn(analyzeProduceAI);
 
@@ -135,7 +137,7 @@ function ComparePage() {
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => e.target.files && add(e.target.files)} />
 
         {ranked.length >= 2 && (
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-3 gap-3">
             <button
               onClick={() => exportComparisonPdf(intent, ranked.map((r, i) => ({
                 rank: i + 1, produceName: r.analysis.produceName,
@@ -146,6 +148,29 @@ function ComparePage() {
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-3.5 font-medium hover:bg-muted"
             >
               <FileDown className="h-4 w-4" /> Export PDF
+            </button>
+            <button
+              onClick={async () => {
+                setSharing(true);
+                try {
+                  const items = ranked.map((r, i) => ({
+                    rank: i + 1, produceName: r.analysis.produceName,
+                    ripeness: r.analysis.ripeness, ripenessScore: r.analysis.ripenessScore,
+                    confidence: r.analysis.confidence, recommendation: r.rec.recommendation,
+                    reasoning: r.rec.reasoning, score: r.rec.score,
+                  }));
+                  const blob = exportComparisonPdfBlob(intent, items);
+                  const url = await uploadAndShareScanPdf(blob, comparisonPdfFilename());
+                  const ok = await copyToClipboard(url);
+                  toast.success(ok ? "Share link copied" : "Link ready", { description: url });
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Share failed");
+                } finally { setSharing(false); }
+              }}
+              disabled={sharing}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-3.5 font-medium hover:bg-muted disabled:opacity-60"
+            >
+              {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} Share link
             </button>
             <button onClick={save} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-2xl gradient-primary text-primary-foreground py-3.5 font-medium shadow-elevated">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
