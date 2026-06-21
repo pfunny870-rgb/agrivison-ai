@@ -4,9 +4,11 @@ import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { RecBadge } from "./dashboard";
 import { type Recommendation } from "@/lib/ai-analysis";
-import { Trash2, ScanLine, FileDown } from "lucide-react";
+import { Trash2, ScanLine, FileDown, Share2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { exportScanPdf } from "@/lib/pdf-export";
+import { exportScanPdf, exportScanPdfBlob, scanPdfFilename } from "@/lib/pdf-export";
+import { uploadAndShareScanPdf, copyToClipboard } from "@/lib/share-pdf";
+import { useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/history")({
   head: () => ({ meta: [{ title: "History · AgriVision AI" }] }),
