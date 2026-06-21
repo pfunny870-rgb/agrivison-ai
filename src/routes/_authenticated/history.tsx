@@ -63,9 +63,14 @@ function HistoryPage() {
                   {s.reasoning && <p className="mt-3 text-sm text-muted-foreground line-clamp-2">{s.reasoning}</p>}
                   <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
                     <span>{new Date(s.created_at).toLocaleDateString()}</span>
-                    <button onClick={() => del(s.id)} className="hover:text-destructive transition flex items-center gap-1">
-                      <Trash2 className="h-3.5 w-3.5" /> Delete
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => exportScanPdf(s as any)} className="hover:text-foreground transition flex items-center gap-1">
+                        <FileDown className="h-3.5 w-3.5" /> PDF
+                      </button>
+                      <button onClick={() => del(s.id)} className="hover:text-destructive transition flex items-center gap-1">
+                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
