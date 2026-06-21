@@ -4,8 +4,9 @@ import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { RecBadge } from "./dashboard";
 import { type Recommendation } from "@/lib/ai-analysis";
-import { Trash2, ScanLine } from "lucide-react";
+import { Trash2, ScanLine, FileDown } from "lucide-react";
 import { toast } from "sonner";
+import { exportScanPdf } from "@/lib/pdf-export";
 
 export const Route = createFileRoute("/_authenticated/history")({
   head: () => ({ meta: [{ title: "History · AgriVision AI" }] }),
