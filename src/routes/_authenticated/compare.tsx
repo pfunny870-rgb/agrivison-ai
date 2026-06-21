@@ -1,11 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
-import { Plus, X, Trophy, Loader2, Save } from "lucide-react";
-import { analyzeImage, recommendFor, INTENT_LABELS, type Intent, type ProduceAnalysis, type Recommendation_Output } from "@/lib/ai-analysis";
+import { Plus, X, Trophy, Loader2, Save, FileDown } from "lucide-react";
+import { recommendFor, INTENT_LABELS, type Intent, type ProduceAnalysis, type Recommendation_Output } from "@/lib/ai-analysis";
+import { analyzeProduceAI } from "@/lib/ai-inference.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { RecBadge } from "./dashboard";
+import { exportComparisonPdf } from "@/lib/pdf-export";
 
 export const Route = createFileRoute("/_authenticated/compare")({
   head: () => ({ meta: [{ title: "Compare · AgriVision AI" }] }),
